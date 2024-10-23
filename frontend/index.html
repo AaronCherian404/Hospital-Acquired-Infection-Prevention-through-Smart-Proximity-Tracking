@@ -1,15 +1,123 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLE Positioning</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Proximity Tracking Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f5f5f5; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .debug-info { background: #f8f9fa; padding: 10px; margin-top: 20px; border-radius: 4px; }
+        .error { color: red; }
+        .status { margin-bottom: 10px; }
+    </style>
 </head>
 <body>
-    <h1>Real-Time BLE Positioning</h1>
-    <div id="map"></div>
+    <div class="container">
+        <h1>Proximity Tracking Dashboard</h1>
+        
+        <div class="status">
+            <p>Last Update: <span id="lastUpdate">Never</span></p>
+            <p>Connection Status: <span id="connectionStatus">Checking...</span></p>
+        </div>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>Active Devices (<span id="deviceCount">0</span>)</h2>
+                <table id="devicesTable">
+                    <thead>
+                        <tr>
+                            <th>Device ID</th>
+                            <th>Type</th>
+                            <th>Position</th>
+                            <th>Last Seen</th>
+                            <th>RSSI</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            
+            <div class="card">
+                <h2>Beacons</h2>
+                <table id="beaconsTable">
+                    <thead>
+                        <tr>
+                            <th>Beacon ID</th>
+                            <th>Position</th>
+                            <th>Battery</th>
+                            <th>Last Seen</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
 
-    <script src="app.js"></script>
+        <div class="debug-info">
+            <h3>Debug Information</h3>
+            <pre id="debugInfo"></pre>
+        </div>
+    </div>
+
+    <script>
+        let lastSuccessfulUpdate = 0;
+        
+        function updateDashboard() {
+            fetch('/get-proximity-data')
+                .then(response => response.json())
+                .then(data => {
+                    lastSuccessfulUpdate = Date.now();
+                    document.getElementById('connectionStatus').textContent = 'Connected';
+                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                    
+                    // Update debug info
+                    document.getElementById('debugInfo').textContent = JSON.stringify(data, null, 2);
+                    
+                    // Update device count
+                    const deviceCount = Object.keys(data.devices).length;
+                    document.getElementById('deviceCount').textContent = deviceCount;
+                    
+                    // Update devices table
+                    const devicesBody = document.querySelector('#devicesTable tbody');
+                    devicesBody.innerHTML = '';
+                    
+                    for (const [deviceId, info] of Object.entries(data.devices)) {
+                        const row = devicesBody.insertRow();
+                        row.insertCell().textContent = deviceId;
+                        row.insertCell().textContent = info.device_type;
+                        row.insertCell().textContent = `(${info.position[0]}, ${info.position[1]})`;
+                        row.insertCell().textContent = new Date(info.last_seen * 1000).toLocaleTimeString();
+                        row.insertCell().textContent = JSON.stringify(info.rssi_readings);
+                    }
+                    
+                    // Update beacons table
+                    const beaconsBody = document.querySelector('#beaconsTable tbody');
+                    beaconsBody.innerHTML = '';
+                    
+                    for (const [beaconId, info] of Object.entries(data.beacons)) {
+                        const row = beaconsBody.insertRow();
+                        row.insertCell().textContent = beaconId;
+                        row.insertCell().textContent = `(${info.position[0]}, ${info.position[1]})`;
+                        row.insertCell().textContent = `${info.battery.toFixed(2)}V`;
+                        row.insertCell().textContent = new Date(info.last_seen * 1000).toLocaleTimeString();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('connectionStatus').textContent = 'Disconnected';
+                    if (Date.now() - lastSuccessfulUpdate > 10000) {
+                        document.getElementById('debugInfo').textContent = 'Connection lost. Check if server is running.';
+                    }
+                });
+        }
+        
+        // Update every second
+        setInterval(updateDashboard, 1000);
+        updateDashboard();
+    </script>
 </body>
 </html>
